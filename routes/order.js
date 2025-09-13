@@ -12,10 +12,10 @@ router.get("/", async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    let query = { owner_user_id: req.user.userId }; // 👈 only own orders
+    let query = { owner_user_id: req.user.userId }; 
     if (search) {
       const matchedCustomers = await Customer.find({
-        owner_user_id: req.user.userId, // 👈 only this user's customers
+        owner_user_id: req.user.userId, 
         $or: [
           { name: { $regex: search, $options: "i" } },
           { customer_id: { $regex: search, $options: "i" } }
@@ -45,15 +45,30 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ ok: false, error: "customer_id and amount are required" });
     }
 
+
     const count = await Order.countDocuments({ owner_user_id: req.user.userId });
-    data.order_id = `ORD${String(count + 1).padStart(3, "0")}`;
-    data.owner_user_id = req.user.userId; // 👈 attach owner
+
+
+    // data.order_id = `ORD${String(count + 1).padStart(3, "0")}`;
+    data.order_id = `${data.customer_id}-ORD${String(count + 1).padStart(3, "0")}`;
+    data.owner_user_id = req.user.userId; 
+
+    console.log(data)
 
     const order = new Order(data);
-    await order.save();
+    try {
+      const order = new Order(data);
+      await order.save();
+      console.log("Order saved successfully");
+    } catch (err) {
+      console.error("Order save failed", err);
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    
+    console.log(2)
 
     await Customer.findOneAndUpdate(
-      { customer_id: data.customer_id, owner_user_id: req.user.userId }, // 👈 only your own customer
+      { customer_id: data.customer_id, owner_user_id: req.user.userId }, 
       {
         $inc: { total_spend: data.amount || 0, visits: 1 },
         $set: { last_order_at: data.created_at ? new Date(data.created_at) : new Date() }
