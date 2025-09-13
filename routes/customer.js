@@ -41,7 +41,6 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ ok: false, error: "name, email, phone are required" });
     }
 
-    console.log(data)
 
     const existing = await Customer.findOne({
       owner_user_id: req.user.userId,

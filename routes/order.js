@@ -48,8 +48,6 @@ router.post("/", async (req, res) => {
 
     const count = await Order.countDocuments({ owner_user_id: req.user.userId });
 
-
-    // data.order_id = `ORD${String(count + 1).padStart(3, "0")}`;
     data.order_id = `${data.customer_id}-ORD${String(count + 1).padStart(3, "0")}`;
     data.owner_user_id = req.user.userId; 
 
