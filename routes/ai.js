@@ -83,54 +83,66 @@ router.post("/segment-nl", async (req, res) => {
   try {
     const { prompt } = req.body;
     console.log(prompt)
-    if (!prompt) return res.status(400).json({ ok: false, error: "prompt required" });
+    if (!prompt)
+      return res.status(400).json({ ok: false, error: "prompt required" });
 
     const aiPrompt = `
 Convert the following description into a JSON rule object.
 
 Allowed fields: "total_spend", "visits", "days_inactive"
-Allowed operators: ">", "<", "=", "!="
+Allowed operators: ">", "<", "=", "!=", ">=", "<="
 
-Return ONLY valid JSON in this exact format:
-{
-  "op": "AND" or "OR",
-  "children": [
-    { "field": "<field>", "cmp": "<operator>", "value": <number> },
-    ...
-  ]
-}
+- Interpret "at least" or "more than or equal to" as ">="
+- Interpret "more than" as ">"
+- Interpret "less than" as "<"
+- Groups can be nested using "op" and "children"
+- Each "children" array can contain either condition objects or nested groups
 
-Example:
+Return ONLY valid JSON with no explanations, like this:
+
 {
-  "op": "AND",
+  "op": "OR",
   "children": [
-    { "field": "total_spend", "cmp": ">", "value": 5000 },
-    { "field": "visits", "cmp": "<", "value": 3 }
+    {
+      "op": "AND",
+      "children": [
+        { "field": "total_spend", "cmp": ">", "value": 1000 },
+        { "field": "visits", "cmp": ">", "value": 0 }
+      ]
+    },
+    { "field": "total_spend", "cmp": ">", "value": 500 }
   ]
 }
 
 Description: "${prompt}"
 `;
 
-
     const aiResp = await callGemini(aiPrompt);
 
-    const clean = aiResp
-  .replace(/```json/i, '')   
-  .replace(/```/g, '')       
-  .trim();
-
-
-    try {
-      const parsed = JSON.parse(clean);
-      res.json({ ok: true, rules: parsed });
-    } catch (err) {
-      res.status(500).json({ ok: false, error: "AI output could not be parsed", raw: aiResp });
+    const match = aiResp.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return res
+        .status(500)
+        .json({ ok: false, error: "No JSON found", raw: aiResp });
     }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(match[0]);
+    } catch (err) {
+      return res.status(500).json({
+        ok: false,
+        error: "AI output could not be parsed",
+        raw: aiResp,
+      });
+    }
+
+    res.json({ ok: true, rules: parsed });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
 
 
 
