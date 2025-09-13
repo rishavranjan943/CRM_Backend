@@ -42,12 +42,18 @@ router.get("/:id/customers", async (req, res) => {
 });
 
 
+
+
 router.post("/", async (req, res) => {
   try {
     const { name, rules } = req.body;
-    if (!name || !rules) return res.status(400).json({ ok: false, error: "name and rules required" });
+
+    if (!name || !rules) {
+      return res.status(400).json({ ok: false, error: "name and rules required" });
+    }
 
     const mongoQuery = buildMongoQuery(rules);
+
     const count = await Customer.countDocuments(mongoQuery);
 
     const seg = await Segment.create({
@@ -68,10 +74,11 @@ router.post("/preview", async (req, res) => {
   try {
     const { rules } = req.body;
     if (!rules || !rules.children) {
-        return res.status(400).json({ ok: false, error: "rules (with children) required" });
+      return res.status(400).json({ ok: false, error: "rules (with children) required" });
     }
 
     const mongoQuery = buildMongoQuery(rules);
+
     const customers = await Customer.find(mongoQuery).limit(10).lean();
     const count = await Customer.countDocuments(mongoQuery);
 
@@ -80,6 +87,9 @@ router.post("/preview", async (req, res) => {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+
+
 
 router.delete("/:id", async (req, res) => {
   try {
