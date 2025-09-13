@@ -8,6 +8,7 @@ const customerSchema = new mongoose.Schema({
   total_spend: { type: Number, default: 0 },
   visits: { type: Number, default: 0 },
   last_order_at: Date,
+  owner_user_id: { type: String, required: true },
   created_at: { type: Date, default: Date.now }
 });
 

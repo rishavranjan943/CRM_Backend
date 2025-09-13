@@ -4,10 +4,6 @@ import Customer from "../models/customer.js";
 
 const router = express.Router();
 
-
-
-
-
 router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -16,9 +12,10 @@ router.get("/", async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    let query = {};
+    let query = { owner_user_id: req.user.userId }; // 👈 only own orders
     if (search) {
       const matchedCustomers = await Customer.find({
+        owner_user_id: req.user.userId, // 👈 only this user's customers
         $or: [
           { name: { $regex: search, $options: "i" } },
           { customer_id: { $regex: search, $options: "i" } }
@@ -26,15 +23,11 @@ router.get("/", async (req, res) => {
       }).select("customer_id");
 
       const matchedIds = matchedCustomers.map(c => c.customer_id);
-      query = { customer_id: { $in: matchedIds } };
+      query.customer_id = { $in: matchedIds };
     }
 
     const [orders, total] = await Promise.all([
-      Order.find(query)
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      Order.find(query).sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
       Order.countDocuments(query)
     ]);
 
@@ -45,28 +38,28 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
     if (!data.customer_id || !data.amount) {
-           return res.status(400).json({ ok: false, error: "customer_id and amount are required" });
-         }
-    const count = await Order.countDocuments();
+      return res.status(400).json({ ok: false, error: "customer_id and amount are required" });
+    }
+
+    const count = await Order.countDocuments({ owner_user_id: req.user.userId });
     data.order_id = `ORD${String(count + 1).padStart(3, "0")}`;
+    data.owner_user_id = req.user.userId; // 👈 attach owner
 
     const order = new Order(data);
     await order.save();
 
     await Customer.findOneAndUpdate(
-      { customer_id: data.customer_id },
+      { customer_id: data.customer_id, owner_user_id: req.user.userId }, // 👈 only your own customer
       {
         $inc: { total_spend: data.amount || 0, visits: 1 },
         $set: { last_order_at: data.created_at ? new Date(data.created_at) : new Date() }
       }
     );
-    console.log(order)
+
     return res.status(201).json({ ok: true, order });
   } catch (err) {
     return res.status(400).json({ ok: false, error: err.message });

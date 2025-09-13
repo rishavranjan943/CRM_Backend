@@ -7,11 +7,12 @@ router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || "";
+    const search = req.query.search?.trim() || "";
 
-    const query = search
-      ? { name: { $regex: search, $options: "i" } }
-      : {};
+    const query = { owner_user_id: req.user.userId }; 
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
 
     const skip = (page - 1) * limit;
 
@@ -32,12 +33,31 @@ router.get("/", async (req, res) => {
   }
 });
 
-
 router.post("/", async (req, res) => {
   try {
-    const count = await Customer.countDocuments();
-    const newId = `CUST${String(count + 1).padStart(3, "0")}`;
-    data.customer_id = newId;
+    const data = req.body;
+
+    if (!data.name || !data.email || !data.phone) {
+      return res.status(400).json({ ok: false, error: "name, email, phone are required" });
+    }
+
+    console.log(data)
+
+    const existing = await Customer.findOne({
+      owner_user_id: req.user.userId,
+      $or: [{ email: data.email }, { phone: data.phone }]
+    });
+    if (existing) {
+      return res.status(400).json({
+        ok: false,
+        error: "Customer already exists with same email or phone"
+      });
+    }
+
+    const count = await Customer.countDocuments({ owner_user_id: req.user.userId });
+    data.customer_id = `CUST${String(count + 1).padStart(3, "0")}`;
+    data.owner_user_id = req.user.userId;
+
     const c = new Customer(data);
     await c.save();
 
@@ -47,7 +67,5 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ ok: false, error: err.message });
   }
 });
-
-
 
 export default router;
