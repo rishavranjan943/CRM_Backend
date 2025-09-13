@@ -5,25 +5,39 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const q = req.query.q || "";
-    const filter = q
-      ? { $or: [{ name: { $regex: q, $options: "i" } }, { email: { $regex: q, $options: "i" } }] }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const query = search
+      ? { name: { $regex: search, $options: "i" } }
       : {};
-    const customers = await Customer.find(filter).limit(200).lean();
-    return res.json({ ok: true, customers });
+
+    const skip = (page - 1) * limit;
+
+    const [customers, total] = await Promise.all([
+      Customer.find(query).skip(skip).limit(limit),
+      Customer.countDocuments(query)
+    ]);
+
+    res.json({
+      ok: true,
+      data: customers,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 
 router.post("/", async (req, res) => {
   try {
-    const data = req.body;
     const count = await Customer.countDocuments();
     const newId = `CUST${String(count + 1).padStart(3, "0")}`;
     data.customer_id = newId;
-
     const c = new Customer(data);
     await c.save();
 

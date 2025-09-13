@@ -69,26 +69,42 @@ router.post("/", async (req, res) => {
 
 router.get("/history", async (req, res) => {
   try {
-    const campaigns = await Campaign.find({ owner_user_id: req.user.userId })
-      .sort({ created_at: -1 })
-      .lean();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search?.trim() || "";
+    const skip = (page - 1) * limit;
 
-    const history = [];
-    for (let camp of campaigns) {
-      const total = await CommunicationLog.countDocuments({ campaign_id: camp._id });
-      const sent = await CommunicationLog.countDocuments({ campaign_id: camp._id, status: "SENT" });
-      const failed = await CommunicationLog.countDocuments({ campaign_id: camp._id, status: "FAILED" });
-      const pending = total - sent - failed;
-
-      history.push({ ...camp, stats: { total, sent, failed, pending } });
+    const filter = { owner_user_id: req.user.userId };
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
     }
 
-    return res.json({ ok: true, history });
+    const [campaigns, total] = await Promise.all([
+      Campaign.find(filter)
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Campaign.countDocuments(filter)
+    ]);
+
+    const history = await Promise.all(
+      campaigns.map(async (camp) => {
+        const totalLogs = await CommunicationLog.countDocuments({ campaign_id: camp._id });
+        const sent = await CommunicationLog.countDocuments({ campaign_id: camp._id, status: "SENT" });
+        const failed = await CommunicationLog.countDocuments({ campaign_id: camp._id, status: "FAILED" });
+        const pending = totalLogs - sent - failed;
+
+        return { ...camp, stats: { total: totalLogs, sent, failed, pending } };
+      })
+    );
+
+    return res.json({ ok: true, history, total });
   } catch (err) {
+    console.error("History fetch error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
-
 
 
 

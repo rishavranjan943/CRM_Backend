@@ -6,10 +6,30 @@ import { buildMongoQuery } from "../utils/rule.js";
 const router = express.Router();
 
 
-
 router.get("/", async (req, res) => {
   try {
-    const segments = await Segment.find({ owner_user_id: req.user.userId }).lean();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search?.trim() || "";
+
+    const skip = (page - 1) * limit;
+
+    const query = {
+      owner_user_id: req.user.userId
+    };
+
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+
+    const [segments, total] = await Promise.all([
+      Segment.find(query)
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Segment.countDocuments(query)
+    ]);
 
     const withCounts = await Promise.all(
       segments.map(async (s) => {
@@ -19,8 +39,9 @@ router.get("/", async (req, res) => {
       })
     );
 
-    return res.json({ ok: true, segments: withCounts });
+    return res.json({ ok: true, segments: withCounts, total });
   } catch (err) {
+    console.error("Segment fetch error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
